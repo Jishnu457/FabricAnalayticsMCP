@@ -44,7 +44,7 @@ def get_fabric_connection():
         raise Exception("Missing required environment variables: FABRIC_SQL_ENDPOINT, FABRIC_DATABASE, FABRIC_CLIENT_ID, FABRIC_CLIENT_SECRET, FABRIC_TENANT_ID")
     
     connection_string = (
-        f"Driver={{ODBC Driver 17 for SQL Server}};"
+        f"Driver={{ODBC Driver 18 for SQL Server}};"
         f"Server={server};"
         f"Database={database};"
         f"Authentication=ActiveDirectoryServicePrincipal;"
