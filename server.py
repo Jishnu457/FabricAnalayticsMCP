@@ -31,6 +31,16 @@ client = AzureOpenAI(
  
 # --- Core Functions ---
  
+def check_odbc_drivers():
+    """Check available ODBC drivers"""
+    try:
+        drivers = pyodbc.drivers()
+        print(f"Available ODBC drivers: {drivers}")
+        return drivers
+    except Exception as e:
+        print(f"Error checking ODBC drivers: {e}")
+        return []
+
 def get_fabric_connection():
     """Create connection to Microsoft Fabric SQL Database"""
     server = os.getenv("FABRIC_SQL_ENDPOINT")
@@ -42,8 +52,29 @@ def get_fabric_connection():
     if not all([server, database, client_id, client_secret, tenant_id]):
         raise Exception("Missing required environment variables: FABRIC_SQL_ENDPOINT, FABRIC_DATABASE, FABRIC_CLIENT_ID, FABRIC_CLIENT_SECRET, FABRIC_TENANT_ID")
    
+    # Check available drivers first
+    available_drivers = check_odbc_drivers()
+    
+    # Try different driver names in order of preference
+    driver_options = [
+        "ODBC Driver 17 for SQL Server",
+        "ODBC Driver 18 for SQL Server", 
+        "ODBC Driver 13 for SQL Server",
+        "FreeTDS"
+    ]
+    
+    driver_to_use = None
+    for driver in driver_options:
+        if driver in available_drivers:
+            driver_to_use = driver
+            print(f"Using ODBC driver: {driver}")
+            break
+    
+    if not driver_to_use:
+        raise Exception(f"No compatible ODBC driver found. Available drivers: {available_drivers}")
+   
     connection_string = (
-        f"Driver={{ODBC Driver 17 for SQL Server}};"
+        f"Driver={{{driver_to_use}}};"
         f"Server={server};"
         f"Database={database};"
         f"Authentication=ActiveDirectoryServicePrincipal;"
@@ -55,11 +86,19 @@ def get_fabric_connection():
    
     try:
         conn = pyodbc.connect(connection_string, timeout=30)
-        print(f"Connected to database: {database}")  # Debug
+        print(f"Connected to database: {database}")
         return conn
     except Exception as e:
-        print(f"Connection failed: {str(e)}")  # Debug
-        raise
+        print(f"Connection failed: {str(e)}")
+        # Try with TrustServerCertificate=yes as fallback
+        fallback_connection_string = connection_string.replace("TrustServerCertificate=no;", "TrustServerCertificate=yes;")
+        try:
+            conn = pyodbc.connect(fallback_connection_string, timeout=30)
+            print(f"Connected to database with fallback settings: {database}")
+            return conn
+        except Exception as fallback_e:
+            print(f"Fallback connection also failed: {str(fallback_e)}")
+            raise e
  
 def execute_query(query: str, params=None) -> List[Dict[str, Any]]:
     """Execute query and return results"""
@@ -73,10 +112,10 @@ def execute_query(query: str, params=None) -> List[Dict[str, Any]]:
        
         result = [{columns[i]: value for i, value in enumerate(row)} for row in rows]
        
-        print(f"Query executed: {query[:100]}... Rows returned: {len(result)}")  # Debug
+        print(f"Query executed: {query[:100]}... Rows returned: {len(result)}")
         return result
     except Exception as e:
-        print(f"Query failed: {str(e)}")  # Debug
+        print(f"Query failed: {str(e)}")
         raise
     finally:
         cursor.close()
@@ -123,7 +162,7 @@ def ask_llm(prompt: str) -> str:
         )
         return response.choices[0].message.content
     except Exception as e:
-        print(f"LLM request failed: {str(e)}")  # Debug
+        print(f"LLM request failed: {str(e)}")
         raise
  
 # --- Table Management ---
@@ -152,7 +191,7 @@ def list_fabric_tables():
             execute_query(test_query)
             working_format = f"[{schema}].[{table_name}]"
         except Exception as e:
-            print(f"Table {full_name} not accessible: {str(e)}")  # Debug
+            print(f"Table {full_name} not accessible: {str(e)}")
             working_format = None
        
         tables.append({
@@ -163,7 +202,7 @@ def list_fabric_tables():
             "working_format": working_format or f"[{schema}].[{table_name}]"
         })
    
-    print(f"Found {len(tables)} tables")  # Debug
+    print(f"Found {len(tables)} tables")
     return tables
  
 def get_table_schema(table_name: str):
@@ -188,10 +227,10 @@ def get_table_schema(table_name: str):
     try:
         results = execute_query(query, (schema, table))
         column_names = [col["COLUMN_NAME"] for col in results]
-        print(f"Columns in {schema}.{table}: {column_names}")  # Debug
+        print(f"Columns in {schema}.{table}: {column_names}")
         return {"table_name": f"{schema}.{table}", "columns": results}
     except Exception as e:
-        print(f"Failed to get schema for {schema}.{table}: {str(e)}")  # Debug
+        print(f"Failed to get schema for {schema}.{table}: {str(e)}")
         raise
  
 def get_tables_info():
@@ -206,7 +245,7 @@ def get_tables_info():
             table_info = f"Table: [{table['schema']}].[{table['name']}]\nColumns: {', '.join(columns)}"
             tables_info.append(table_info)
         except Exception as e:
-            print(f"Skipping schema for {table['full_name']}: {str(e)}")  # Debug
+            print(f"Skipping schema for {table['full_name']}: {str(e)}")
             tables_info.append(f"Table: [{table['schema']}].[{table['name']}] (Schema unavailable)")
    
     return "\n\n".join(tables_info)
@@ -285,7 +324,7 @@ def smart_analyze_question(question: str, limit: int = 50) -> Dict[str, Any]:
         generated_sql_raw = ask_llm(prompt)
         generated_sql = clean_generated_sql(generated_sql_raw)
        
-        print("Generated SQL:", generated_sql)  # Debug
+        print("Generated SQL:", generated_sql)
        
         if generated_sql.strip().upper() == "INSUFFICIENT_DATA":
             return {
@@ -326,7 +365,7 @@ def smart_analyze_question(question: str, limit: int = 50) -> Dict[str, Any]:
         try:
             results = execute_query(generated_sql)
         except Exception as e:
-            print(f"Query execution failed: {str(e)}")  # Debug
+            print(f"Query execution failed: {str(e)}")
             return {
                 "question": question,
                 "error": f"SQL execution failed: {str(e)}",
@@ -363,7 +402,7 @@ Provide a specific, direct answer:
         }
        
     except Exception as e:
-        print(f"Analysis failed: {str(e)}")  # Debug
+        print(f"Analysis failed: {str(e)}")
         return {
             "question": question,
             "error": f"Analysis failed: {str(e)}",
@@ -375,6 +414,33 @@ Provide a specific, direct answer:
 @app.get("/")
 async def root():
     return {"status": "ok", "service": "Microsoft Fabric SQL Analytics MCP Server"}
+
+@app.get("/api/fabric/system-check")
+def system_check():
+    """Check system capabilities and ODBC drivers"""
+    try:
+        drivers = check_odbc_drivers()
+        
+        # Test environment variables
+        env_vars = {
+            "AZURE_OPENAI_KEY": "✓" if os.getenv("AZURE_OPENAI_KEY") else "✗",
+            "AZURE_OPENAI_ENDPOINT": "✓" if os.getenv("AZURE_OPENAI_ENDPOINT") else "✗",
+            "AZURE_OPENAI_DEPLOYMENT": "✓" if os.getenv("AZURE_OPENAI_DEPLOYMENT") else "✗",
+            "FABRIC_SQL_ENDPOINT": "✓" if os.getenv("FABRIC_SQL_ENDPOINT") else "✗",
+            "FABRIC_DATABASE": "✓" if os.getenv("FABRIC_DATABASE") else "✗",
+            "FABRIC_CLIENT_ID": "✓" if os.getenv("FABRIC_CLIENT_ID") else "✗",
+            "FABRIC_CLIENT_SECRET": "✓" if os.getenv("FABRIC_CLIENT_SECRET") else "✗",
+            "FABRIC_TENANT_ID": "✓" if os.getenv("FABRIC_TENANT_ID") else "✗",
+        }
+        
+        return {
+            "odbc_drivers": drivers,
+            "environment_variables": env_vars,
+            "python_version": os.sys.version,
+            "platform": os.name
+        }
+    except Exception as e:
+        return {"error": str(e)}
  
 @app.get("/api/fabric/tables")
 def get_tables():
@@ -432,11 +498,11 @@ def list_all_tables():
 def direct_fabric_test():
     """Test direct access to ThreatsDetectedTable"""
     test_queries = [
-        "SELECT TOP 1 * FROM [dbo].[ThreatsDetectedTable]",  # Sample data
-        "SELECT TOP 10 [Employee ID], [Severity] FROM [dbo].[ThreatsDetectedTable] WHERE [Severity] = 'high'",  # Check high severity
-        "SELECT TOP 10 [Employee ID], [Severity] FROM [dbo].[ThreatsDetectedTable] WHERE [Employee ID] = 1152",  # Check Employee ID
-        "SELECT DISTINCT [Severity] FROM [dbo].[ThreatsDetectedTable]",  # Check Severity values
-        "SELECT COUNT(*) AS row_count FROM [dbo].[ThreatsDetectedTable]"  # Check total rows
+        "SELECT TOP 1 * FROM [dbo].[ThreatsDetectedTable]",
+        "SELECT TOP 10 [Employee ID], [Severity] FROM [dbo].[ThreatsDetectedTable] WHERE [Severity] = 'high'",
+        "SELECT TOP 10 [Employee ID], [Severity] FROM [dbo].[ThreatsDetectedTable] WHERE [Employee ID] = 1152",
+        "SELECT DISTINCT [Severity] FROM [dbo].[ThreatsDetectedTable]",
+        "SELECT COUNT(*) AS row_count FROM [dbo].[ThreatsDetectedTable]"
     ]
    
     results = {}
@@ -448,7 +514,7 @@ def direct_fabric_test():
                 "status": "SUCCESS",
                 "rows_returned": len(result),
                 "first_row_keys": list(result[0].keys()) if result else [],
-                "data": result[:5]  # Include first 5 rows
+                "data": result[:5]
             }
         except Exception as e:
             results[f"query_{i+1}"] = {
@@ -538,8 +604,10 @@ if __name__ == "__main__":
     print("- Schema-qualified table names (e.g., [dbo].[Table Name])")
     print("- Debug endpoints for table access and query generation")
     print("- Case-sensitive handling for Severity values")
+    print("- ODBC driver auto-detection and fallback")
     print("")
     print("Endpoints:")
+    print("- GET  /api/fabric/system-check - Check system and drivers")
     print("- POST /api/fabric/smart-analyze - Smart query analysis")
     print("- GET  /api/fabric/health - Health check")
     print("- GET  /api/fabric/list-tables - List all tables")
@@ -548,4 +616,6 @@ if __name__ == "__main__":
     print("- GET  /api/fabric/database-info - Database information")
     print("- POST /api/fabric/debug - Debug query generation")
     print("")
-    uvicorn.run("server:app", host="0.0.0.0", port=8001, reload=True)
+    
+    port = int(os.getenv("PORT", 8001))
+    uvicorn.run("server:app", host="0.0.0.0", port=port, reload=False)
