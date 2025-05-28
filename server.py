@@ -548,4 +548,4 @@ if __name__ == "__main__":
     print("- GET  /api/fabric/database-info - Database information")
     print("- POST /api/fabric/debug - Debug query generation")
     print("")
-    uvicorn.run("__main__:app", host="0.0.0.0", port=8001, reload=True)
+    uvicorn.run("server:app", host="0.0.0.0", port=8001, reload=True)
