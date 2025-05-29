@@ -696,7 +696,7 @@
                 try {
                     const rowLimit = this.getCurrentRowLimit();
                    
-                    const response = await fetch(`${this.elements.serverUrl.value}/api/fabric/analyze`, {
+                    const response = await fetch(`${this.elements.serverUrl.value}/api/fabric/smart-analyze`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
