@@ -519,7 +519,6 @@
         <div class="header-controls">
  
             <button class="clear-btn" id="clearBtn">Clear Chat</button>
-            <button class="clear-btn" id="clearCacheBtn">Clear Cache</button>
             <div class="status-badge offline" id="connectionBadge">
  
                 <div class="status-indicator" id="statusIndicator"></div>
@@ -604,8 +603,7 @@
  
                     connectionBadge: document.getElementById('connectionBadge'),
  
-                    clearBtn: document.getElementById('clearBtn'),
-                    clearCacheBtn: document.getElementById('clearCacheBtn')
+                    clearBtn: document.getElementById('clearBtn')
  
                 };
  
@@ -615,7 +613,7 @@
  
                     isConnected: false,
  
-                    serverUrl: 'https://smartassistantmcp.onrender.com',
+                    serverUrl: 'https://smartassistantmcp1.onrender.com',
                     endpoints: {
                         health: '/api/fabric/health',
                         analyze: '/api/fabric/intelligent-analyze',
@@ -626,6 +624,7 @@
                 };
  
                
+
                
  
                 this.setupEventListeners();
@@ -639,7 +638,6 @@
             setupEventListeners() {
  
                 this.elements.clearBtn.onclick = () => this.clearChat();
-                this.elements.clearCacheBtn.onclick = () => this.clearCache();
                 this.elements.sendBtn.onclick = () => this.sendMessage();
                
  
@@ -970,30 +968,6 @@
                 // Replace **text** with <strong>text</strong>
                 processedText = processedText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
                 return processedText;
-            }
- 
-            async clearCache() {
-                this.elements.clearCacheBtn.disabled = true;
-                this.addMessage('Clearing cache...', 'system');
-                try {
-                    const response = await fetch(`${this.state.serverUrl}${this.state.endpoints.clear_cache}`, {
-                        method: 'POST', // Use POST for actions
-                        headers: {
-                             'Accept': 'application/json'
-                         }
-                    });
- 
-                    if (response.ok) {
-                        this.addMessage('✅ Cache cleared successfully!', 'system');
-                    } else {
-                        const errorText = await response.text();
-                        throw new Error(`Failed to clear cache: ${response.status} ${response.statusText} - ${errorText}`);
-                    }
-                } catch (error) {
-                    this.addMessage(`❌ Failed to clear cache: ${error.message}`, 'system');
-                } finally {
-                    this.elements.clearCacheBtn.disabled = false;
-                }
             }
  
         }
