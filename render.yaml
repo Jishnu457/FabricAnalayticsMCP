@@ -3,7 +3,7 @@ services:
     name: fabric-sql-analytics
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn server:app --host 0.0.0.0 --port 8001
+    startCommand: uvicorn server:app --host 0.0.0.0 --port 8002
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
