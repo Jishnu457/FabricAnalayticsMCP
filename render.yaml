@@ -3,7 +3,7 @@ services:
     name: fabric-sql-analytics
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn server:app --host 0.0.0.0 --port 8002
+    startCommand: uvicorn server:app --host 0.0.0.0 --port 8005
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
@@ -25,3 +25,7 @@ services:
         sync: false
       - key: AZURE_OPENAI_DEPLOYMENT
         sync: false 
+      - key: KUSTO_CLUSTER
+        sync: false
+      - key: KUSTO_DATABASE
+        sync: false
